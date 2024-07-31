@@ -1,4 +1,4 @@
-package com.data_ingestion.dataingestion;
+package com.data_ingestion;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.*;
@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import com.google.api.gax.paging.Page;
 
 public class GCSClient {
     private Storage storage;

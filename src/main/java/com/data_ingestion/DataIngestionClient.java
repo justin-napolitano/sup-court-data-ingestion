@@ -1,4 +1,4 @@
-package com.data_ingestion.dataingestion;
+package com.data_ingestion;
 
 import java.sql.*;
 import java.util.List;

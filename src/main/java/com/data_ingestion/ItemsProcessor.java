@@ -1,6 +1,7 @@
-package com.data_ingestion.dataingestion;
+package com.data_ingestion;
 
 import org.json.JSONObject;
+import org.postgresql.util.PSQLException;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -8,7 +9,7 @@ import java.util.List;
 
 public class ItemsProcessor {
 
-    public void process(JSONObject jsonObject, DataIngestionClient dbClient) throws SQLException {
+    public void process(JSONObject jsonObject, DataIngestionClient dbClient) {
         List<Object> params = new ArrayList<>();
         JSONObject item = jsonObject.getJSONObject("item");
 
@@ -20,7 +21,17 @@ public class ItemsProcessor {
         params.add(jsonObject.getString("title"));
         params.add(jsonObject.getString("id"));
 
-        // Insert data into Items table
-        dbClient.insertData("INSERT INTO Items (callnumber, created_published, date, notes, sourcecollection, title, externalid) VALUES (?, ?, ?, ?, ?, ?, ?)", params);
+        try {
+            // Insert data into Items table
+            dbClient.insertData("INSERT INTO Items (call_number, created_published, date, notes, source_collection, title, external_id) VALUES (?, ?, ?, ?, ?, ?, ?)", params);
+        } catch (PSQLException e) {
+            if (e.getSQLState().equals("23505")) { // 23505 is the SQL state for unique violation
+                System.err.println("Duplicate entry for Items with external_id: " + jsonObject.getString("id"));
+            } else {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 }

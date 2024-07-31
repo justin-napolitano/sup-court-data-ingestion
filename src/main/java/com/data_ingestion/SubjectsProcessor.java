@@ -19,7 +19,7 @@ public class SubjectsProcessor {
 
             try {
                 // Insert data into Subjects table
-                dbClient.insertData("INSERT INTO Subjects (external_id, subject) VALUES (?, ?, ?)", params);
+                dbClient.insertData("INSERT INTO Subjects (external_id, subject) VALUES (?, ?)", params);
             } catch (PSQLException e) {
                 if (e.getSQLState().equals("23505")) { // 23505 is the SQL state for unique violation
                     System.err.println("Duplicate entry for Subjects with external_id: " + jsonObject.getString("id"));

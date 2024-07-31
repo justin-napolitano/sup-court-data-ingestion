@@ -72,7 +72,7 @@ public class DataIngestionMain {
                     SubjectsProcessor subjectsProcessor = new SubjectsProcessor();
                     subjectsProcessor.process(result, dbClient);
                     System.out.println("Processed Subjects for result " + (i + 1));
-                    System.exit(0);
+                    // System.exit(0);
                 }
             }
 

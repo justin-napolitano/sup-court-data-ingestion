@@ -1,233 +1,175 @@
 +++
 title =  "PostGreSQL Java: Data Ingestion"
-description = "Learning java with DBs
+description = "Setting Up a Data Ingestion Workflow with Java and Google Cloud Storage"
 tags = ['java', "postgresql","cdp"]
 images = ["images/feature-image.png"]
 date = "2024-07-31T14:25:13-05:00"
 categories = ["projects"]
-series = ["Java"]
+series = ["java", "supreme-court"]
++++
 
-# How to Set Up a PostgreSQL Database and Tables Using Java and Maven
+# Setting Up a Data Ingestion Workflow with Java and Google Cloud Storage
 
-I've been working on this supreme court case thing. I recently played with DataShare to see if I could use something out of the box for some analysis. It was an okay tool... but not really powerful enough for my use case. I want to create automated workflows at some scale and build out applications that are more versatile. So I am starting over with Java.. which I haven't really used in about 15 years.  
+## Introduction
+In this blog post, we will walk through setting up a data ingestion workflow using Java. The workflow will download JSON data from a Google Cloud Storage (GCS) bucket, parse it, and insert it into a PostgreSQL database. We will also handle unique constraint violations gracefully.
 
 ## Prerequisites
 
-- Basic knowledge of Java and Maven
-- Docker installed on your machine
-- PostgreSQL JDBC Driver
+* Java 11 or higher installed
+* Maven installed
+* PostgreSQL running locally (preferably in a Docker container)
+* Google Cloud Storage bucket with JSON files
+* Service account key for Google Cloud Storage
+  
+## Setting Up the Project
 
-## Step 1: Set Up PostgreSQL with Docker
+### 1. Project Structure
+Create the following directory structure for your project:
 
-First, let's create a Docker container for PostgreSQL and Adminer, a web-based database management tool.
-
-Create a `docker-compose.yml` file with the following content:
-
-```yaml
-version: '3.9'
-
-services:
-  db:
-    image: postgres:latest
-    restart: always
-    shm_size: 128mb
-    environment:
-      POSTGRES_USER: example
-      POSTGRES_PASSWORD: example
-      POSTGRES_DB: example
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  adminer:
-    image: adminer:latest
-    restart: always
-    ports:
-      - "8080:8080"
-
-volumes:
-  pgdata:
+```css
+sup-court-data-ingestion/
+└── src/
+    └── main/
+        └── java/
+            └── com/
+                └── data_ingestion/
+                    ├── GCSClient.java
+                    ├── DataIngestionClient.java
+                    ├── CallNumbersProcessor.java
+                    ├── ContributorsProcessor.java
+                    ├── ItemsProcessor.java
+                    ├── ResourcesProcessor.java
+                    ├── SubjectsProcessor.java
+                    └── DataIngestionMain.java
 ```
 
-To start the services, run the following command:
-
-```bash
-docker-compose up -d
-```
-
-## Step 2: Set Up Maven Project
-
-Create a new Maven project structure:
-
-```
-my-java-project/
-├── src/
-│   └── main/
-│       └── java/
-│           └── com/
-│               └── createdb/
-│                   ├── DatabaseClient.java
-│                   └── Main.java
-├── sql/
-│   ├── CallNumbers.sql
-│   ├── Contributors.sql
-│   ├── Items.sql
-│   ├── Resources.sql
-│   └── Subjects.sql
-├── pom.xml
-```
-
-## Step 3: Define SQL Files
-
-Create SQL files to define the tables:
-
-### `sql/CallNumbers.sql`
-
-```sql
-CREATE TABLE IF NOT EXISTS CallNumbers (
-    id VARCHAR(255) PRIMARY KEY,
-    callnumber VARCHAR(255) NOT NULL
-);
-```
-
-### `sql/Contributors.sql`
-
-```sql
-CREATE TABLE IF NOT EXISTS Contributors (
-    id VARCHAR(255) PRIMARY KEY,
-    contributor VARCHAR(255) NOT NULL
-);
-```
-
-### `sql/Items.sql`
-
-```sql
-CREATE TABLE IF NOT EXISTS Items (
-    id SERIAL PRIMARY KEY,
-    callnumber VARCHAR(255) NOT NULL,
-    created_published VARCHAR(255),
-    date DATE,
-    notes TEXT,
-    sourcecollection VARCHAR(255),
-    title VARCHAR(255) NOT NULL,
-    externalid VARCHAR(255) UNIQUE NOT NULL
-);
-```
-
-### `sql/Resources.sql`
-
-```sql
-CREATE TABLE IF NOT EXISTS Resources (
-    id SERIAL PRIMARY KEY,
-    external_id VARCHAR(255) UNIQUE NOT NULL,
-    image VARCHAR(255),
-    pdf VARCHAR(255)
-);
-```
-
-### `sql/Subjects.sql`
-
-```sql
-CREATE TABLE IF NOT EXISTS Subjects (
-    id SERIAL PRIMARY KEY,
-    external_id VARCHAR(255) UNIQUE NOT NULL,
-    subject VARCHAR(255) NOT NULL
-);
-```
-
-## Step 4: Create Maven `pom.xml`
-
-Create a `pom.xml` file with the necessary dependencies and plugins:
+### 2. pom.xml
+Ensure your pom.xml includes the necessary dependencies:
 
 ```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.example</groupId>
-    <artifactId>sup-court-db-normalizer</artifactId>
-    <version>1.0-SNAPSHOT</version>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.data_ingestion</groupId>
+  <artifactId>sup-court-data-ingestion</artifactId>
+  <packaging>jar</packaging>
+  <version>1.0-SNAPSHOT</version>
+  <name>sup-court-data-ingestion</name>
+  <url>http://maven.apache.org</url>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <version>42.2.23</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-storage</artifactId>
-            <version>2.1.4</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-bigquery</artifactId>
-            <version>2.1.4</version>
-        </dependency>
-    </dependencies>
+  <dependencies>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>42.2.23</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-storage</artifactId>
+      <version>2.1.4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20210307</version>
+    </dependency>
+  </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>11</source>
-                    <target>11</target>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.0.0</version>
-                <configuration>
-                    <mainClass>com.createdb.Main</mainClass>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.8.1</version>
+        <configuration>
+          <source>11</source>
+          <target>11</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.0.0</version>
+        <configuration>
+          <mainClass>com.data_ingestion.DataIngestionMain</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
-```
+``` 
 
-## Step 5: Write Java Code
+## Implementing the Java Classes
 
-### `DatabaseClient.java`
+### 1. GCSClient.java
 
 ```java
-package com.createdb;
+package com.data_ingestion;
 
-import java.sql.*;
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.storage.*;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import com.google.api.gax.paging.Page;
 
-public class DatabaseClient {
+public class GCSClient {
+    private Storage storage;
+
+    public GCSClient(String projectId, String credentialsPath) throws IOException {
+        GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath))
+                .createScoped(List.of("https://www.googleapis.com/auth/cloud-platform"));
+        storage = StorageOptions.newBuilder().setProjectId(projectId).setCredentials(credentials).build().getService();
+    }
+
+    public String downloadJson(String bucketName, String objectName) {
+        Blob blob = storage.get(BlobId.of(bucketName, objectName));
+        if (blob == null) {
+            throw new RuntimeException("No such object");
+        }
+        return new String(blob.getContent(), StandardCharsets.UTF_8);
+    }
+
+    public List<String> listObjects(String bucketName) {
+        List<String> objectNames = new ArrayList<>();
+        Page<Blob> blobs = storage.list(bucketName);
+        for (Blob blob : blobs.iterateAll()) {
+            objectNames.add(blob.getName());
+        }
+        return objectNames;
+    }
+}
+```
+
+### 2. DataIngestionClient.java
+
+```java
+
+package com.data_ingestion;
+
+import java.sql.*;
+import java.util.List;
+
+public class DataIngestionClient {
     private Connection connection;
 
-    public DatabaseClient(String url, String user, String password) throws SQLException {
+    public DataIngestionClient(String url, String user, String password) throws SQLException {
         connection = DriverManager.getConnection(url, user, password);
     }
 
-    // Execute SQL file
-    public void executeSqlFile(String filePath) throws SQLException, IOException {
-        String sql = new String(Files.readAllBytes(Paths.get(filePath)));
-        String[] sqlStatements = sql.split(";");
-
-        try (Statement stmt = connection.createStatement()) {
-            for (String statement : sqlStatements) {
-                if (!statement.trim().isEmpty()) {
-                    stmt.execute(statement.trim());
-                }
+    public void insertData(String insertSQL, List<Object> parameters) throws SQLException {
+        try (PreparedStatement pstmt = connection.prepareStatement(insertSQL)) {
+            for (int i = 0; i < parameters.size(); i++) {
+                pstmt.setObject(i + 1, parameters.get(i));
             }
+            pstmt.executeUpdate();
         }
     }
 
-    // Close connection
     public void close() throws SQLException {
         if (connection != null && !connection.isClosed()) {
             connection.close();
@@ -236,53 +178,287 @@ public class DatabaseClient {
 }
 ```
 
-### `Main.java`
+### 3. Processors with Exception Handling
+
+#### CallNumbersProcessor.java
 
 ```java
-package com.createdb;
+package com.data_ingestion;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
+import org.json.JSONObject;
+import org.postgresql.util.PSQLException;
+
 import java.sql.SQLException;
-import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
-public class Main {
-    public static void main(String[] args) {
-        String url = "jdbc:postgresql://localhost:5432/postgres";
-        String user = "example";
-        String password = "example";
-        String dbName = "supreme-court";
+public class CallNumbersProcessor {
 
-        try (Connection connection = DriverManager.getConnection(url, user, password);
-             Statement statement = connection.createStatement()) {
+    public void process(JSONObject jsonObject, DataIngestionClient dbClient) {
+        List<Object> params = new ArrayList<>();
+        params.add(jsonObject.getString("id"));
+        params.add(jsonObject.getJSONObject("item").getJSONArray("call_number").getString(0));
 
-            // Create the database if it doesn't exist
-            ResultSet resultSet = statement.executeQuery("SELECT 1 FROM pg_database WHERE datname = '" + dbName + "'");
-            if (!resultSet.next()) {
-                statement.executeUpdate("CREATE DATABASE "" + dbName + """);
-                System.out.println("Database " + dbName + " created successfully.");
+        try {
+            dbClient.insertData("INSERT INTO CallNumbers (external_id, call_number) VALUES (?, ?)", params);
+        } catch (PSQLException e) {
+            if (e.getSQLState().equals("23505")) { // 23505 is the SQL state for unique violation
+                System.err.println("Duplicate entry for CallNumbers with external_id: " + jsonObject.getString("id"));
             } else {
-                System.out.println("Database " + dbName + " already exists.");
+                e.printStackTrace();
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+}
+```
 
-        // Connect to the new database and execute SQL files to create tables
+#### ContributorsProcessor.java
+
+```java
+
+package com.data_ingestion;
+
+import org.json.JSONObject;
+import org.postgresql.util.PSQLException;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ContributorsProcessor {
+
+    public void process(JSONObject jsonObject, DataIngestionClient dbClient) {
+        List<Object> params = new ArrayList<>();
+        params.add(jsonObject.getString("id"));
+        params.add(jsonObject.getJSONArray("contributor").getString(0));
+
         try {
-            String dbUrl = "jdbc:postgresql://localhost:5432/" + dbName;
-            DatabaseClient dbClient = new DatabaseClient(dbUrl, user, password);
+            dbClient.insertData("INSERT INTO Contributors (external_id, contributor) VALUES (?, ?)", params);
+        } catch (PSQLException e) {
+            if (e.getSQLState().equals("23505")) {
+                System.err.println("Duplicate entry for Contributors with external_id: " + jsonObject.getString("id"));
+            } else {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
 
-            // Execute SQL files to create tables
-            dbClient.executeSqlFile("sql/CallNumbers.sql");
-            dbClient.executeSqlFile("sql/Contributors.sql");
-            dbClient.executeSqlFile("sql/Items.sql");
-            dbClient.executeSqlFile("sql/Resources.sql");
-            dbClient.executeSqlFile("sql/Subjects.sql");
+#### ItemsProcessor.java
+
+```java
+
+package com.data_ingestion;
+
+import org.json.JSONObject;
+import org.postgresql.util.PSQLException;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ItemsProcessor {
+
+    public void process(JSONObject jsonObject, DataIngestionClient dbClient) {
+        List<Object> params = new ArrayList<>();
+        JSONObject item = jsonObject.getJSONObject("item");
+
+        params.add(item.getJSONArray("call_number").getString(0));
+        params.add(item.optString("created_published", null));
+        params.add(item.optString("date", null));
+        params.add(item.optString("notes", null));
+        params.add(item.optString("source_collection", null));
+        params.add(jsonObject.getString("title"));
+        params.add(jsonObject.getString("id"));
+
+        try {
+            dbClient.insertData("INSERT INTO Items (call_number, created_published, date, notes, source_collection, title, external_id) VALUES (?, ?, ?, ?, ?, ?, ?)", params);
+        } catch (PSQLException e) {
+            if (e.getSQLState().equals("23505")) {
+                System.err.println("Duplicate entry for Items with external_id: " + jsonObject.getString("id"));
+            } else {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+#### ResourcesProcessor.java
+
+```java
+
+package com.data_ingestion;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.postgresql.util.PSQLException;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ResourcesProcessor {
+
+    public void process(JSONObject jsonObject, DataIngestionClient dbClient) {
+        JSONArray resourcesArray = jsonObject.getJSONArray("resources");
+        for (int i = 0; i < resourcesArray.length(); i++) {
+            JSONObject resource = resourcesArray.getJSONObject(i);
+            List<Object> params = new ArrayList<>();
+            params.add(jsonObject.getString("id"));
+            params.add(resource.optString("image", null));
+            params.add(resource.optString("pdf", null));
+
+            try {
+                dbClient.insertData("INSERT INTO Resources (external_id, image, pdf) VALUES (?, ?, ?)", params);
+            } catch (PSQLException e) {
+                if (e.getSQLState().equals("23505")) {
+                    System.err.println("Duplicate entry for Resources with external_id: " + jsonObject.getString("id"));
+                } else {
+                    e.printStackTrace();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+```
+
+#### SubjectsProcessor.java
+
+```java
+
+package com.data_ingestion;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.postgresql.util.PSQLException;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class SubjectsProcessor {
+
+    public void process(JSONObject jsonObject, DataIngestionClient dbClient) {
+        JSONArray subjectsArray = jsonObject.getJSONArray("subject");
+        for (int i = 0; i < subjectsArray.length(); i++) {
+            List<Object> params = new ArrayList<>();
+            params.add(jsonObject.getString("id"));
+            params.add(subjectsArray.getString(i));
+
+            try {
+                dbClient.insertData("INSERT INTO Subjects (external_id, subject) VALUES (?, ?, ?)", params);
+            } catch (PSQLException e) {
+                if (e.getSQLState().equals("23505")) {
+                    System.err.println("Duplicate entry for Subjects with external_id: " + jsonObject.getString("id"));
+                } else {
+                    e.printStackTrace();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+``` 
+
+## The Main File
+
+### DataIngestionMain.java
+
+
+```java
+
+package com.data_ingestion;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+
+public class DataIngestionMain {
+    public static void main(String[] args) {
+        String dbName = "supreme-court";
+        String dbUrl = "jdbc:postgresql://localhost:5432/" + dbName;
+        String user = "example";
+        String password = "example";
+        String projectId = "smart-axis-421517";
+        String credentialsPath = "/home/cobra/Repos/justin-napolitano/sup-court-data-ingestion/resources/secret.json";  // Update this to the path of your JSON key
+        String bucketName = "processed_results";
+
+        try {
+            System.out.println("Initializing Database Client...");
+            DataIngestionClient dbClient = new DataIngestionClient(dbUrl, user, password);
+            System.out.println("Database Client initialized.");
+
+            System.out.println("Initializing GCS Client...");
+            GCSClient gcsClient = new GCSClient(projectId, credentialsPath);
+            System.out.println("GCS Client initialized.");
+
+            System.out.println("Listing objects in the bucket: " + bucketName);
+            List<String> objectNames = gcsClient.listObjects(bucketName);
+            System.out.println("Total objects found: " + objectNames.size());
+
+            for (String objectName : objectNames) {
+                System.out.println("Processing object: " + objectName);
+
+                // Download JSON data
+                String jsonData = gcsClient.downloadJson(bucketName, objectName);
+                System.out.println("Downloaded JSON data for object: " + objectName);
+
+                // Parse JSON data
+                JSONObject jsonObject = new JSONObject(jsonData);
+                JSONArray resultsArray = jsonObject.getJSONObject("content").getJSONArray("results");
+                System.out.println("Parsed JSON data. Total results: " + resultsArray.length());
+
+                // Process each result
+                for (int i = 0; i < resultsArray.length(); i++) {
+                    JSONObject result = resultsArray.getJSONObject(i);
+                    System.out.println("Processing result " + (i + 1) + " of " + resultsArray.length());
+
+                    // Process CallNumbers
+                    CallNumbersProcessor callNumbersProcessor = new CallNumbersProcessor();
+                    callNumbersProcessor.process(result, dbClient);
+                    System.out.println("Processed CallNumbers for result " + (i + 1));
+
+                    // Process Contributors
+                    ContributorsProcessor contributorsProcessor = new ContributorsProcessor();
+                    contributorsProcessor.process(result, dbClient);
+                    System.out.println("Processed Contributors for result " + (i + 1));
+
+                    // Process Items
+                    ItemsProcessor itemsProcessor = new ItemsProcessor();
+                    itemsProcessor.process(result, dbClient);
+                    System.out.println("Processed Items for result " + (i + 1));
+
+                    // Process Resources
+                    ResourcesProcessor resourcesProcessor = new ResourcesProcessor();
+                    resourcesProcessor.process(result, dbClient);
+                    System.out.println("Processed Resources for result " + (i + 1));
+
+                    // Process Subjects
+                    SubjectsProcessor subjectsProcessor = new SubjectsProcessor();
+                    subjectsProcessor.process(result, dbClient);
+                    System.out.println("Processed Subjects for result " + (i + 1));
+                }
+            }
 
             dbClient.close();
+            System.out.println("Database Client connection closed.");
         } catch (SQLException | IOException e) {
             e.printStackTrace();
         }
@@ -290,20 +466,25 @@ public class Main {
 }
 ```
 
-## Step 6: Run the Project
+## Running the Project
 
-1. **Compile the project**:
-   ```bash
-   mvn compile
-   ```
+### Navigate to the Project Directory:
 
-2. **Run the `Main` class**:
-   ```bash
-   mvn exec:java -Dexec.mainClass="com.createdb.Main"
-   ```
+```bash
+cd /path/to/sup-court-data-ingestion
+Compile the Project:
+```
 
-This setup will create the `supreme-court` database if it does not exist and then execute the SQL files to create the tables. You can verify the results using Adminer by navigating to `http://localhost:8080` in your web browser.
+```bash
+
+mvn compile
+Execute the Main Class:
+```
+
+```bash
+
+mvn exec:java -Dexec.mainClass="com.data_ingestion.DataIngestionMain"
+```
 
 ## Conclusion
-
-In this post, we set up a PostgreSQL database using Docker, created a Maven project to manage our Java code, defined our database tables with SQL files, and wrote Java code to automate the creation of the database and tables. This setup provides a robust foundation for further development and integration with your data processing applications.
+In this blog post, we walked through setting up a data ingestion workflow using Java and Google Cloud Storage. We covered how to handle unique constraint violations and ensure our data is correctly ingested into the PostgreSQL database. By following these steps, you should be able to set up a robust data ingestion workflow for your own use case.Copy code

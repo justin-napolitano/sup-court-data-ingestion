@@ -1,8 +1,0 @@
-com/data_ingestion/ItemsProcessor.class
-com/data_ingestion/CallNumbersProcessor.class
-com/data_ingestion/DataIngestionClient.class
-com/data_ingestion/SubjectsProcessor.class
-com/data_ingestion/DataIngestionMain.class
-com/data_ingestion/ContributorsProcessor.class
-com/data_ingestion/ResourcesProcessor.class
-com/data_ingestion/GCSClient.class

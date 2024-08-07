@@ -13,9 +13,9 @@ public class DataIngestionMain {
         String dbUrl = "jdbc:postgresql://localhost:5432/" + dbName;
         String user = "example";
         String password = "example";
-        String projectId = "smart-axis-421517";
+        String projectId = "loc-unprocessed-results";
         String credentialsPath = "/home/cobra/Repos/justin-napolitano/sup-court-data-ingestion/resources/secret.json";  // Update this to the path of your JSON key
-        String bucketName = "processed_results";
+        String bucketName = "loc-unprocessed-results";
 
         try {
             System.out.println("Initializing Database Client...");
